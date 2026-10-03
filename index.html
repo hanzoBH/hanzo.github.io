@@ -1,0 +1,488 @@
+```html
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bảng Vẽ Pixel 400x400 (Lưu Trữ Realtime)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: #0f172a;
+      color: #f8fafc;
+      overflow: hidden;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    #viewport {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      cursor: crosshair;
+      background-color: #020617;
+      background-image: 
+        radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 0);
+      background-size: 20px 20px;
+      touch-action: none;
+    }
+    
+    #canvasContainer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 400px;
+      height: 400px;
+      box-shadow: 0 0 30px rgba(0,0,0,0.8);
+      border-radius: 2px;
+    }
+    
+    canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      /* Giữ ô pixel sắc nét tuyệt đối khi phóng to */
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      -ms-interpolation-mode: nearest-neighbor;
+    }
+    
+    #gridCanvas { 
+      pointer-events: none; 
+    }
+    
+    input[type="color"]::-webkit-color-swatch-wrapper {
+      padding: 0;
+    }
+    input[type="color"]::-webkit-color-swatch {
+      border: none;
+      border-radius: 6px;
+    }
+  </style>
+</head>
+<body class="bg-slate-900 text-slate-100 flex flex-col h-screen select-none">
+
+  <header class="bg-slate-950 border-b border-slate-800 px-4 py-2.5 flex flex-wrap gap-3 items-center justify-between z-20 shadow-md">
+    <div class="flex items-center gap-3">
+      <div class="bg-indigo-600 text-white px-3 py-1.5 rounded-lg font-bold flex items-center gap-2 shadow-lg shadow-indigo-500/20">
+        <i class="fa-solid fa-palette text-lg"></i>
+        <span class="text-sm sm:text-base">HanzoBH Pixel World</span>
+      </div>
+      
+      <!-- Lựa chọn màu sắc -->
+      <div class="flex items-center gap-2 bg-slate-800 px-2.5 py-1.5 rounded-lg border border-slate-700">
+        <label for="colorPicker" class="text-xs text-slate-400 font-medium cursor-pointer">Màu:</label>
+        <input type="color" id="colorPicker" value="#ef4444" class="w-7 h-7 bg-transparent cursor-pointer rounded">
+      </div>
+      
+      <!-- Bảng màu nhanh -->
+      <div class="hidden md:flex items-center gap-1.5 bg-slate-800 p-1.5 rounded-lg border border-slate-700" id="paletteQuick">
+        <button data-color="#ef4444" class="w-6 h-6 rounded bg-red-500 hover:scale-110 transition-transform" title="Đỏ"></button>
+        <button data-color="#f97316" class="w-6 h-6 rounded bg-orange-500 hover:scale-110 transition-transform" title="Cam"></button>
+        <button data-color="#eab308" class="w-6 h-6 rounded bg-yellow-500 hover:scale-110 transition-transform" title="Vàng"></button>
+        <button data-color="#22c55e" class="w-6 h-6 rounded bg-green-500 hover:scale-110 transition-transform" title="Xanh lá"></button>
+        <button data-color="#06b6d4" class="w-6 h-6 rounded bg-cyan-500 hover:scale-110 transition-transform" title="Xanh lam"></button>
+        <button data-color="#3b82f6" class="w-6 h-6 rounded bg-blue-500 hover:scale-110 transition-transform" title="Xanh dương"></button>
+        <button data-color="#a855f7" class="w-6 h-6 rounded bg-purple-500 hover:scale-110 transition-transform" title="Tím"></button>
+        <button data-color="#000000" class="w-6 h-6 rounded bg-black border border-slate-600 hover:scale-110 transition-transform" title="Đen"></button>
+        <button data-color="#ffffff" class="w-6 h-6 rounded bg-white hover:scale-110 transition-transform" title="Trắng"></button>
+      </div>
+    </div>
+
+    <!-- Các công cụ vẽ -->
+    <div class="flex items-center gap-2">
+      <button id="btnPencil" class="px-3 py-1.5 rounded-lg bg-indigo-600 text-white font-medium text-sm hover:bg-indigo-500 transition-colors flex items-center gap-1.5 shadow">
+        <i class="fa-solid fa-pen"></i> <span class="hidden sm:inline">Bút vẽ</span>
+      </button>
+      <button id="btnEraser" class="px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 font-medium text-sm hover:bg-slate-700 transition-colors flex items-center gap-1.5">
+        <i class="fa-solid fa-eraser"></i> <span class="hidden sm:inline">Tẩy</span>
+      </button>
+      <button id="btnToggleGrid" class="px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 font-medium text-sm hover:bg-slate-700 transition-colors flex items-center gap-1.5">
+        <i class="fa-solid fa-border-all"></i> <span class="hidden sm:inline">Lưới</span>
+      </button>
+      <button id="btnReset" class="px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 font-medium text-sm hover:bg-slate-700 transition-colors flex items-center gap-1.5">
+        <i class="fa-solid fa-crosshairs"></i> <span class="hidden sm:inline">Về giữa</span>
+      </button>
+      <button id="btnDownload" class="px-3 py-1.5 rounded-lg bg-emerald-600 text-white font-medium text-sm hover:bg-emerald-500 transition-colors flex items-center gap-1.5 shadow">
+        <i class="fa-solid fa-download"></i> <span class="hidden sm:inline">Tải về</span>
+      </button>
+    </div>
+
+    <!-- Trạng thái kết nối & Tọa độ -->
+    <div class="flex items-center gap-3 text-xs text-slate-400">
+      <div id="statusBadge" class="flex items-center gap-1.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2.5 py-1 rounded-full">
+        <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+        <span id="statusText">Kết nối server...</span>
+      </div>
+      <div id="coords" class="hidden lg:block font-mono bg-slate-800 px-2.5 py-1 rounded border border-slate-700">
+        (0, 0) | Zoom: 100%
+      </div>
+    </div>
+  </header>
+
+  <!-- Khung nhìn Canvas -->
+  <main id="viewport">
+    <div id="canvasContainer">
+      <canvas id="pixelCanvas" width="400" height="400"></canvas>
+      <canvas id="gridCanvas" width="400" height="400"></canvas>
+    </div>
+  </main>
+
+  <!-- Hướng dẫn sử dụng bên dưới -->
+  <footer class="bg-slate-950 border-t border-slate-800 px-4 py-1.5 text-center text-xs text-slate-400 flex justify-between items-center z-20">
+    <span>💡 <b>Mẹo:</b> Giữ chuột phải/con lăn để kéo màn hình. Cuộn chuột để Zoom nét.</span>
+    <span class="text-indigo-400 font-semibold flex items-center gap-1">
+      <i class="fa-solid fa-cloud-arrow-up text-xs"></i> Tự động lưu Realtime
+    </span>
+  </footer>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    // Kích thước chuẩn 400x400
+    const GRID_SIZE = 400;
+
+    // DOM Elements
+    const container = document.getElementById('canvasContainer');
+    const canvas = document.getElementById('pixelCanvas');
+    const ctx = canvas.getContext('2d');
+    const gridCanvas = document.getElementById('gridCanvas');
+    const gridCtx = gridCanvas.getContext('2d');
+    const viewport = document.getElementById('viewport');
+    const colorPicker = document.getElementById('colorPicker');
+    const coordsDisplay = document.getElementById('coords');
+    const statusBadge = document.getElementById('statusBadge');
+    const statusText = document.getElementById('statusText');
+
+    // Tắt tính năng làm mịn hình ảnh trong Canvas 2D
+    ctx.imageSmoothingEnabled = false;
+    ctx.webkitImageSmoothingEnabled = false;
+    ctx.mozImageSmoothingEnabled = false;
+
+    // Trạng thái Camera & Công cụ
+    let scale = 1;
+    let panX = 0, panY = 0;
+    let isPanning = false, isDrawing = false;
+    let startX = 0, startY = 0;
+    let isEraser = false;
+    let showGrid = false;
+
+    // Nền trắng mặc định
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, GRID_SIZE, GRID_SIZE);
+
+    // --- CẤU HÌNH FIREBASE REALTIME ---
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'hanzobh-pixel-world';
+    const firebaseConfig = typeof __firebase_config !== 'undefined' 
+      ? JSON.parse(__firebase_config) 
+      : {
+          apiKey: "demo-key",
+          authDomain: "demo.firebaseapp.com",
+          projectId: "demo-project",
+          storageBucket: "demo.appspot.com",
+          messagingSenderId: "123456",
+          appId: "1:123456:web:123456"
+        };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    // Chia mảng pixel thành các Chunk 20x20 để tối ưu Firestore
+    const CHUNK_SIZE = 20;
+    const NUM_CHUNKS = GRID_SIZE / CHUNK_SIZE; // 20x20 chunks = 400 chunks
+    let pendingUpdates = {};
+    let saveTimeout = null;
+
+    // Khoảng thời gian tự động đồng bộ (Debounce)
+    async function initFirebase() {
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+
+        updateStatus('success', 'Đã kết nối Realtime');
+        listenToFirestore();
+      } catch (err) {
+        console.error("Lỗi kết nối Firebase:", err);
+        updateStatus('error', 'Chế độ ngoại tuyến');
+      }
+    }
+
+    function updateStatus(type, message) {
+      statusText.innerText = message;
+      if (type === 'success') {
+        statusBadge.className = "flex items-center gap-1.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-1 rounded-full";
+        statusBadge.querySelector('span').className = "w-2 h-2 rounded-full bg-emerald-400";
+      } else if (type === 'saving') {
+        statusBadge.className = "flex items-center gap-1.5 bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2.5 py-1 rounded-full";
+        statusBadge.querySelector('span').className = "w-2 h-2 rounded-full bg-blue-400 animate-pulse";
+      } else {
+        statusBadge.className = "flex items-center gap-1.5 bg-rose-500/10 text-rose-400 border border-rose-500/20 px-2.5 py-1 rounded-full";
+        statusBadge.querySelector('span').className = "w-2 h-2 rounded-full bg-rose-400";
+      }
+    }
+
+    // Lắng nghe dữ liệu nét vẽ thời gian thực
+    function listenToFirestore() {
+      if (!auth.currentUser) return;
+
+      for (let chunkY = 0; chunkY < NUM_CHUNKS; chunkY++) {
+        for (let chunkX = 0; chunkX < NUM_CHUNKS; chunkX++) {
+          const chunkId = `c_${chunkX}_${chunkY}`;
+          const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'pixel_chunks', chunkId);
+
+          onSnapshot(docRef, (snapshot) => {
+            if (snapshot.exists()) {
+              const data = snapshot.data();
+              if (data.pixels) {
+                applyChunkPixels(chunkX, chunkY, data.pixels);
+              }
+            }
+          }, (error) => {
+            console.error("Lỗi dữ liệu Firestore:", error);
+          });
+        }
+      }
+    }
+
+    // Vẽ pixel cập nhật từ Firestore lên canvas
+    function applyChunkPixels(chunkX, chunkY, pixelsObj) {
+      const startX = chunkX * CHUNK_SIZE;
+      const startY = chunkY * CHUNK_SIZE;
+
+      Object.entries(pixelsObj).forEach(([key, color]) => {
+        const [relX, relY] = key.split('_').map(Number);
+        const absX = startX + relX;
+        const absY = startY + relY;
+
+        ctx.fillStyle = color;
+        ctx.fillRect(absX, absY, 1, 1);
+      });
+    }
+
+    function queuePixelUpdate(x, y, color) {
+      const chunkX = Math.floor(x / CHUNK_SIZE);
+      const chunkY = Math.floor(y / CHUNK_SIZE);
+      const chunkId = `c_${chunkX}_${chunkY}`;
+
+      const relX = x % CHUNK_SIZE;
+      const relY = y % CHUNK_SIZE;
+
+      if (!pendingUpdates[chunkId]) {
+        pendingUpdates[chunkId] = {};
+      }
+      pendingUpdates[chunkId][`${relX}_${relY}`] = color;
+
+      if (saveTimeout) clearTimeout(saveTimeout);
+      updateStatus('saving', 'Đang lưu...');
+
+      saveTimeout = setTimeout(syncPendingUpdatesToFirestore, 350);
+    }
+
+    async function syncPendingUpdatesToFirestore() {
+      if (!auth.currentUser) return;
+      const updatesToSync = { ...pendingUpdates };
+      pendingUpdates = {};
+
+      try {
+        const promises = Object.entries(updatesToSync).map(([chunkId, pixels]) => {
+          const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'pixel_chunks', chunkId);
+          return setDoc(docRef, { pixels }, { merge: true });
+        });
+
+        await Promise.all(promises);
+        updateStatus('success', 'Đã lưu Realtime');
+      } catch (err) {
+        console.error("Lỗi lưu nét vẽ:", err);
+        updateStatus('error', 'Lỗi lưu dữ liệu');
+      }
+    }
+
+    function drawGrid() {
+      gridCtx.clearRect(0, 0, GRID_SIZE, GRID_SIZE);
+      if (!showGrid || scale < 2) return; // Hiện lưới khi scale >= 200%
+
+      gridCtx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
+      gridCtx.lineWidth = 0.05;
+
+      for (let i = 0; i <= GRID_SIZE; i++) {
+        gridCtx.beginPath();
+        gridCtx.moveTo(i, 0);
+        gridCtx.lineTo(i, GRID_SIZE);
+        gridCtx.stroke();
+
+        gridCtx.beginPath();
+        gridCtx.moveTo(0, i);
+        gridCtx.lineTo(GRID_SIZE, i);
+        gridCtx.stroke();
+      }
+    }
+
+    function centerCanvas() {
+      const rect = viewport.getBoundingClientRect();
+      scale = Math.min(rect.width / GRID_SIZE, rect.height / GRID_SIZE) * 0.85;
+      panX = (rect.width - GRID_SIZE * scale) / 2;
+      panY = (rect.height - GRID_SIZE * scale) / 2;
+      updateTransform();
+    }
+
+    function updateTransform() {
+      container.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+      container.style.transformOrigin = '0 0';
+      coordsDisplay.innerText = `Zoom: ${Math.round(scale * 100)}%`;
+      drawGrid();
+    }
+
+    function getPixelCoords(e) {
+      const rect = canvas.getBoundingClientRect();
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      const x = Math.floor((clientX - rect.left) / scale);
+      const y = Math.floor((clientY - rect.top) / scale);
+      return { x, y };
+    }
+
+    function drawPixel(x, y) {
+      if (x >= 0 && x < GRID_SIZE && y >= 0 && y < GRID_SIZE) {
+        const color = isEraser ? '#ffffff' : colorPicker.value;
+        ctx.fillStyle = color;
+        ctx.fillRect(x, y, 1, 1);
+
+        queuePixelUpdate(x, y, color);
+      }
+    }
+
+    // Mouse & Touch Controls
+    viewport.addEventListener('mousedown', (e) => {
+      if (e.button === 0) { // Chuột trái -> Vẽ
+        isDrawing = true;
+        const { x, y } = getPixelCoords(e);
+        drawPixel(x, y);
+      } else if (e.button === 1 || e.button === 2) { // Chuột giữa / phải -> Pan
+        isPanning = true;
+        startX = e.clientX - panX;
+        startY = e.clientY - panY;
+      }
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      const { x, y } = getPixelCoords(e);
+      if (x >= 0 && x < GRID_SIZE && y >= 0 && y < GRID_SIZE) {
+        coordsDisplay.innerText = `(${x}, ${y}) | Zoom: ${Math.round(scale * 100)}%`;
+      }
+
+      if (isDrawing) {
+        drawPixel(x, y);
+      } else if (isPanning) {
+        panX = e.clientX - startX;
+        panY = e.clientY - startY;
+        updateTransform();
+      }
+    });
+
+    window.addEventListener('mouseup', () => {
+      isDrawing = false;
+      isPanning = false;
+    });
+
+    // Hỗ trợ cảm ứng điện thoại
+    viewport.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 1) {
+        isDrawing = true;
+        const { x, y } = getPixelCoords(e);
+        drawPixel(x, y);
+      }
+    }, { passive: true });
+
+    viewport.addEventListener('touchmove', (e) => {
+      if (isDrawing && e.touches.length === 1) {
+        const { x, y } = getPixelCoords(e);
+        drawPixel(x, y);
+      }
+    }, { passive: true });
+
+    viewport.addEventListener('touchend', () => {
+      isDrawing = false;
+    });
+
+    viewport.addEventListener('contextmenu', e => e.preventDefault());
+
+    // Zoom mượt đến 200x - 500x
+    viewport.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const zoomFactor = 1.15;
+      let newScale = e.deltaY < 0 ? scale * zoomFactor : scale / zoomFactor;
+      newScale = Math.max(0.5, Math.min(newScale, 200));
+
+      const rect = viewport.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+
+      panX = mouseX - (mouseX - panX) * (newScale / scale);
+      panY = mouseY - (mouseY - panY) * (newScale / scale);
+      scale = newScale;
+
+      updateTransform();
+    }, { passive: false });
+
+    // --- BUTTON CONTROLS & DOWNLOAD ---
+    const btnPencil = document.getElementById('btnPencil');
+    const btnEraser = document.getElementById('btnEraser');
+    const btnToggleGrid = document.getElementById('btnToggleGrid');
+
+    btnPencil.addEventListener('click', () => {
+      isEraser = false;
+      btnPencil.className = "px-3 py-1.5 rounded-lg bg-indigo-600 text-white font-medium text-sm hover:bg-indigo-500 transition-colors flex items-center gap-1.5 shadow";
+      btnEraser.className = "px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 font-medium text-sm hover:bg-slate-700 transition-colors flex items-center gap-1.5";
+    });
+
+    btnEraser.addEventListener('click', () => {
+      isEraser = true;
+      btnEraser.className = "px-3 py-1.5 rounded-lg bg-indigo-600 text-white font-medium text-sm hover:bg-indigo-500 transition-colors flex items-center gap-1.5 shadow";
+      btnPencil.className = "px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 font-medium text-sm hover:bg-slate-700 transition-colors flex items-center gap-1.5";
+    });
+
+    btnToggleGrid.addEventListener('click', () => {
+      showGrid = !showGrid;
+      btnToggleGrid.classList.toggle('bg-indigo-600', showGrid);
+      btnToggleGrid.classList.toggle('text-white', showGrid);
+      drawGrid();
+    });
+
+    document.getElementById('btnReset').addEventListener('click', centerCanvas);
+
+    // Tải ảnh PNG chất lượng cao
+    document.getElementById('btnDownload').addEventListener('click', () => {
+      const link = document.createElement('a');
+      link.download = `pixel-art-${Date.now()}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    });
+
+    // Chọn màu nhanh
+    document.getElementById('paletteQuick').addEventListener('click', (e) => {
+      const btn = e.target.closest('button');
+      if (btn && btn.dataset.color) {
+        colorPicker.value = btn.dataset.color;
+        if (isEraser) btnPencil.click();
+      }
+    });
+
+    window.addEventListener('resize', centerCanvas);
+    centerCanvas();
+
+    // Khởi chạy Firebase
+    initFirebase();
+  </script>
+</body>
+</html>
+```
